@@ -21,14 +21,14 @@ To see it in action, check out the `examples` directory for sample code.
 
 - [x] Main, top-level `Madeleine` interface
 - [x] Example code
-- [ ] Snapshot logic
+- [x] Snapshot logic
 - [x] Command logging
 - [ ] Persistence
   - [x] Commands
-  - [ ] Snapshots
+  - [x] Snapshots
 - [ ] Resumption/rehydration from
   - [ ] Command log
-  - [ ] Snapshots
+  - [x] Snapshots
   - [ ] Mixed scenarios involving commands following a snapshot
 - [ ] Garbage collection
 - [x] Benchmarks
