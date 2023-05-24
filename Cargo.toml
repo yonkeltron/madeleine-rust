@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "Transparent object persistence with predefined operations and state containers."
 authors = ["Jonathan E. Magen <59451+yonkeltron@users.noreply.github.com>"]
-license = "APACHE"
+license = "Apache-2.0"
 readme = "README.md"
-publish = false
+homepage = "https://github.com/Evernorth/madeleine-rust"
+repository = "https://github.com/Evernorth/madeleine-rust.git"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
