@@ -1,6 +1,6 @@
 [package]
 name = "madeleine"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Transparent object persistence with predefined operations and state containers."
 authors = ["Jonathan E. Magen <59451+yonkeltron@users.noreply.github.com>"]
