@@ -15,6 +15,8 @@ Since the commands are the _only_ things capable of altering the system, this co
 As every command log is persisted to disk, an application can exit or crash with the understanding that it may replay the command log on resumption without apparent effect.
 In other words, it could conceivably pick back up right where it left off.
 
+## Usage
+
 To see it in action, check out the `examples` directory for sample code.
 
 ## Installation
@@ -58,3 +60,15 @@ madeleine = "0.2.0" # Or latest version
   - [x] JSON
   - [ ] TOML
   - [ ] CBOR
+
+## Getting help
+
+If you have questions, concerns, bug reports, etc, please file an issue in this repository's Issue Tracker.
+
+## Getting involved
+
+Please see the [CONTRIBUTING.md](CONTRIBUTING.md) file for info on how to get involved.
+
+## License
+
+Madeleine is Open Source Software released under the [Apache 2.0 license](https://www.apache.org/licenses/LICENSE-2.0.html).
