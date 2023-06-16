@@ -17,6 +17,20 @@ In other words, it could conceivably pick back up right where it left off.
 
 To see it in action, check out the `examples` directory for sample code.
 
+## Installation
+
+This installation method requires a recent [version of Cargo which supports `cargo-add`](https://doc.rust-lang.org/cargo/commands/cargo-add.html):
+
+```bash
+cargo add madeleine
+```
+
+For older installations of Rust, you can either use [`cargo-edit`](https://crates.io/crates/cargo-edit) or simply add the dependency to you `Cargo.toml` manually:
+
+```toml
+madeleine = "0.2.0" # Or latest version
+```
+
 ## Feature Roadmap
 
 - [x] Main, top-level `Madeleine` interface
