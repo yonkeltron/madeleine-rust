@@ -6,8 +6,8 @@ description = "Transparent object persistence with predefined operations and sta
 authors = ["Jonathan E. Magen <59451+yonkeltron@users.noreply.github.com>"]
 license = "Apache-2.0"
 readme = "README.md"
-homepage = "https://github.com/Evernorth/madeleine-rust"
-repository = "https://github.com/Evernorth/madeleine-rust.git"
+homepage = "https://github.com/yonkeltron/madeleine-rust"
+repository = "https://github.com/yonkeltron/madeleine-rust.git"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
