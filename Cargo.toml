@@ -12,7 +12,7 @@ repository = "https://github.com/yonkeltron/madeleine-rust.git"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-commitlog = "0.2.0"
+rusqlite = { version = "0.30.0", features = ["serde_json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.96"
 thiserror = "1.0"

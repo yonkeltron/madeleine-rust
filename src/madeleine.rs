@@ -2,12 +2,12 @@ use std::cell::RefCell;
 use std::fs;
 use std::path::PathBuf;
 
-use commitlog::Offset;
 use serde::{Deserialize, Serialize};
 
 use crate::command::Command;
 use crate::command_log::CommandLog;
 use crate::madeleine_error::MadeleineError;
+use crate::result::Result;
 
 const COMMAND_LOG_DIR_NAME: &str = "command_log";
 const SNAPSHOT_FILE_SUFFIX: &str = "snapshot";
@@ -66,7 +66,7 @@ impl<SystemState: Clone + for<'a> Deserialize<'a> + Serialize> Madeleine<SystemS
 
   /// Execute the command on the business object and update the application state.
   /// Then, log the command.
-  pub fn execute_command<'a, C>(&self, command: C) -> Result<Offset, MadeleineError>
+  pub fn execute_command<'a, C>(&self, command: C) -> Result<(), MadeleineError>
   where
     C: Command<'a, SystemState = SystemState> + Serialize + Deserialize<'a>,
   {
@@ -93,13 +93,13 @@ impl<SystemState: Clone + for<'a> Deserialize<'a> + Serialize> Madeleine<SystemS
   }
 
   /// Gets the length of the command history.
-  pub fn len(&self) -> u64 {
+  pub fn len(&self) -> Result<u64> {
     self.command_log.len()
   }
 
   /// Determine if the instance has an empty command history.
-  pub fn is_empty(&self) -> bool {
-    self.command_log.len() == 0
+  pub fn is_empty(&self) -> Result<bool> {
+    Ok(self.command_log.len()? == 0)
   }
 
   /// Take and persist a snapshot of the internal state.
@@ -339,7 +339,7 @@ mod tests {
       state
     });
 
-    let actual = madeleine.len();
+    let actual = madeleine.len().expect("unable to query length in test");
 
     assert_eq!(actual, 0);
   }
@@ -352,7 +352,7 @@ mod tests {
       state
     });
 
-    let length_at_start = madeleine.len();
+    let length_at_start = madeleine.len().expect("unable to query length in test");
 
     assert_eq!(length_at_start, 0);
 
@@ -364,7 +364,7 @@ mod tests {
         .expect("unable to execute increment action in test");
     }
 
-    let actual = madeleine.len();
+    let actual = madeleine.len().expect("unable to query length in test");
 
     assert_eq!(actual, 613);
   }

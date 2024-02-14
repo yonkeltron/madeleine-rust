@@ -1,0 +1,5 @@
+CREATE TABLE commits (
+  id    INTEGER PRIMARY KEY,
+  ulid  TEXT NOT NULL,
+  data  TEXT NOT NULL
+);

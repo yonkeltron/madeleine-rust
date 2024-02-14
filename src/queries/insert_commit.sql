@@ -1,0 +1,1 @@
+INSERT INTO commits (ulid, data) VALUES (:ulid, :data);
