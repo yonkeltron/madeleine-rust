@@ -33,7 +33,7 @@ impl CommandLog {
 
     let serialized_command = serde_json::to_string(&command)?;
 
-    let offset = self.conn.execute(
+    self.conn.execute(
       INSERT_COMMIT_SQL,
       &[
         (":ulid", ulid.as_str()),
