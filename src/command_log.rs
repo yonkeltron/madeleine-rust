@@ -66,8 +66,6 @@ mod tests {
   use super::*;
 
   use assert_fs::prelude::*;
-  use predicates::prelude::*;
-  use pretty_assertions::assert_eq;
 
   #[test]
   fn test_init_command_log() {
@@ -77,7 +75,7 @@ mod tests {
       .child("madeleine.db")
       .assert(predicates::path::missing());
 
-    let command_log = CommandLog::new(temp_dir.path().to_path_buf())
+    let _command_log = CommandLog::new(temp_dir.path().to_path_buf())
       .expect("unable to instantiate command log in test");
 
     temp_dir
