@@ -2,12 +2,12 @@ use std::cell::RefCell;
 use std::fs;
 use std::path::PathBuf;
 
-use commitlog::Offset;
 use serde::{Deserialize, Serialize};
 
 use crate::command::Command;
 use crate::command_log::CommandLog;
 use crate::madeleine_error::MadeleineError;
+use crate::madeleine_result::Result;
 
 const COMMAND_LOG_DIR_NAME: &str = "command_log";
 const SNAPSHOT_FILE_SUFFIX: &str = "snapshot";
@@ -21,7 +21,7 @@ pub struct Madeleine<SystemState: Clone + for<'a> Deserialize<'a> + Serialize> {
 
 impl<SystemState: Clone + for<'a> Deserialize<'a> + Serialize> Madeleine<SystemState> {
   /// Generalized constructor.
-  pub fn new<C>(location_dir_path: PathBuf, constructor: C) -> Result<Self, MadeleineError>
+  pub fn new<C>(location_dir_path: PathBuf, constructor: C) -> Result<Self>
   where
     C: FnOnce() -> SystemState,
   {
@@ -66,7 +66,7 @@ impl<SystemState: Clone + for<'a> Deserialize<'a> + Serialize> Madeleine<SystemS
 
   /// Execute the command on the business object and update the application state.
   /// Then, log the command.
-  pub fn execute_command<'a, C>(&self, command: C) -> Result<Offset, MadeleineError>
+  pub fn execute_command<'a, C>(&self, command: C) -> Result<(), MadeleineError>
   where
     C: Command<'a, SystemState = SystemState> + Serialize + Deserialize<'a>,
   {
@@ -93,30 +93,13 @@ impl<SystemState: Clone + for<'a> Deserialize<'a> + Serialize> Madeleine<SystemS
   }
 
   /// Gets the length of the command history.
-  pub fn len(&self) -> u64 {
+  pub fn len(&self) -> Result<u64> {
     self.command_log.len()
   }
 
   /// Determine if the instance has an empty command history.
-  pub fn is_empty(&self) -> bool {
-    self.command_log.len() == 0
-  }
-
-  /// Take and persist a snapshot of the internal state.
-  pub fn take_snapshot(&self) -> Result<usize, MadeleineError> {
-    let state = self.internal_state.try_borrow()?;
-    let next_snapshot_id = self.next_snapshot_id()?;
-    let location = snapshot_file_path(next_snapshot_id, self.location_dir_path.clone());
-
-    let serialized = serde_json::to_string(&*state)?;
-    fs::write(location, serialized)?;
-
-    write_snapshot_id_file(
-      self.location_dir_path.join(SNAPSHOT_FILE_SUFFIX),
-      next_snapshot_id,
-    )?;
-
-    Ok(0)
+  pub fn is_empty(&self) -> Result<bool> {
+    Ok(self.command_log.len()? == 0)
   }
 
   /// Determine the next snapshot id in sequence.
@@ -141,17 +124,6 @@ fn snapshot_file_path(snapshot_id: usize, location_dir_path: PathBuf) -> PathBuf
 
 fn snapshot_id_file_path(location_dir_path: PathBuf) -> PathBuf {
   location_dir_path.join(SNAPSHOT_FILE_SUFFIX)
-}
-
-/// Write the snapshot ID file
-fn write_snapshot_id_file(
-  snapshot_file_id_name: PathBuf,
-  current_snapshot_id: usize,
-) -> Result<usize, MadeleineError> {
-  let raw = serde_json::to_string(&current_snapshot_id)?;
-  fs::write(snapshot_file_id_name, raw)?;
-
-  Ok(current_snapshot_id)
 }
 
 #[cfg(test)]
@@ -192,7 +164,7 @@ mod tests {
   }
 
   #[track_caller]
-  fn make_test_madeleine<T, C>(constructor: C) -> Madeleine<T>
+  fn make_test_madeleine<T, C>(constructor: C) -> (assert_fs::TempDir, Madeleine<T>)
   where
     C: Fn() -> T,
     T: Clone + for<'a> Deserialize<'a> + Serialize,
@@ -201,7 +173,10 @@ mod tests {
 
     let log_path = temp_dir.path().join("test_log");
 
-    Madeleine::new(log_path, constructor).expect("unable to instantiate madeleine in test")
+    (
+      temp_dir,
+      Madeleine::new(log_path, constructor).expect("unable to instantiate madeleine in test"),
+    )
   }
 
   #[test]
@@ -224,21 +199,21 @@ mod tests {
   #[test]
   fn test_into_inner() {
     let state = 42;
-    let madeleine = make_test_madeleine(|| state);
+    let (_temp_dir, madeleine) = make_test_madeleine(|| state);
 
     assert_eq!(state, madeleine.into_inner());
   }
 
   #[test]
   fn test_new_sets_constructor_result_as_state() {
-    let madeleine = make_test_madeleine(|| 41 + 1);
+    let (_temp_dir, madeleine) = make_test_madeleine(|| 41 + 1);
 
     assert_eq!(42, madeleine.into_inner());
   }
 
   #[test]
   fn test_execute_command_once() {
-    let madeleine = make_test_madeleine(|| {
+    let (_temp_dir, madeleine) = make_test_madeleine(|| {
       let state: HashMap<String, usize> = HashMap::new();
 
       state
@@ -263,7 +238,7 @@ mod tests {
 
   #[test]
   fn test_execute_command_many() {
-    let madeleine = make_test_madeleine(|| {
+    let (_temp_dir, madeleine) = make_test_madeleine(|| {
       let state: HashMap<String, usize> = HashMap::new();
 
       state
@@ -290,7 +265,7 @@ mod tests {
 
   #[test]
   fn test_tap() {
-    let madeleine = make_test_madeleine(|| {
+    let (_temp_dir, madeleine) = make_test_madeleine(|| {
       let state: HashMap<String, usize> = HashMap::new();
 
       state
@@ -333,26 +308,26 @@ mod tests {
 
   #[test]
   fn test_len_with_empty() {
-    let madeleine = make_test_madeleine(|| {
+    let (_temp_dir, madeleine) = make_test_madeleine(|| {
       let state: HashMap<String, usize> = HashMap::new();
 
       state
     });
 
-    let actual = madeleine.len();
+    let actual = madeleine.len().expect("unable to count length in test");
 
     assert_eq!(actual, 0);
   }
 
   #[test]
   fn test_len_with_some_commands() {
-    let madeleine = make_test_madeleine(|| {
+    let (_temp_dir, madeleine) = make_test_madeleine(|| {
       let state: HashMap<String, usize> = HashMap::new();
 
       state
     });
 
-    let length_at_start = madeleine.len();
+    let length_at_start = madeleine.len().expect("unable to count length in test");
 
     assert_eq!(length_at_start, 0);
 
@@ -364,14 +339,14 @@ mod tests {
         .expect("unable to execute increment action in test");
     }
 
-    let actual = madeleine.len();
+    let actual = madeleine.len().expect("unable to count length in test");
 
     assert_eq!(actual, 613);
   }
 
   #[test]
   fn test_next_snapshot_id_first() {
-    let madeleine = make_test_madeleine(|| {
+    let (_temp_dir, madeleine) = make_test_madeleine(|| {
       let state: HashMap<String, usize> = HashMap::new();
 
       state
@@ -384,88 +359,88 @@ mod tests {
     assert_eq!(actual, 0);
   }
 
-  #[test]
-  fn test_next_snapshot_id_subsequent() {
-    let temp_dir = assert_fs::TempDir::new().expect("unable to create temp dir in test");
+  // #[test]
+  // fn test_next_snapshot_id_subsequent() {
+  //   let temp_dir = assert_fs::TempDir::new().expect("unable to create temp dir in test");
 
-    let log_path = temp_dir.path().join("test_store");
+  //   let log_path = temp_dir.path().join("test_store");
 
-    let state = 0;
+  //   let state = 0;
 
-    let madeleine =
-      Madeleine::new(log_path, &|| state).expect("unable to instantiate madeleine in test");
+  //   let madeleine =
+  //     Madeleine::new(log_path, &|| state).expect("unable to instantiate madeleine in test");
 
-    temp_dir
-      .child("test_store")
-      .child(SNAPSHOT_FILE_SUFFIX)
-      .assert(predicate::path::missing());
+  //   temp_dir
+  //     .child("test_store")
+  //     .child(SNAPSHOT_FILE_SUFFIX)
+  //     .assert(predicate::path::missing());
 
-    let actual_fresh = madeleine
-      .next_snapshot_id()
-      .expect("unable to determine next snapshot id in test");
+  //   let actual_fresh = madeleine
+  //     .next_snapshot_id()
+  //     .expect("unable to determine next snapshot id in test");
 
-    assert_eq!(actual_fresh, 0);
+  //   assert_eq!(actual_fresh, 0);
 
-    madeleine
-      .take_snapshot()
-      .expect("unable to take snapshot in test");
+  //   madeleine
+  //     .take_snapshot()
+  //     .expect("unable to take snapshot in test");
 
-    temp_dir
-      .child("test_store")
-      .child(SNAPSHOT_FILE_SUFFIX)
-      .assert(predicate::path::exists());
+  //   temp_dir
+  //     .child("test_store")
+  //     .child(SNAPSHOT_FILE_SUFFIX)
+  //     .assert(predicate::path::exists());
 
-    let actual_after_one = madeleine
-      .next_snapshot_id()
-      .expect("unable to determine next snapshot id in test");
+  //   let actual_after_one = madeleine
+  //     .next_snapshot_id()
+  //     .expect("unable to determine next snapshot id in test");
 
-    assert_eq!(actual_after_one, 1);
+  //   assert_eq!(actual_after_one, 1);
 
-    madeleine
-      .take_snapshot()
-      .expect("unable to take snapshot in test");
+  //   madeleine
+  //     .take_snapshot()
+  //     .expect("unable to take snapshot in test");
 
-    let actual_after_two = madeleine
-      .next_snapshot_id()
-      .expect("unable to determine next snapshot id in test");
+  //   let actual_after_two = madeleine
+  //     .next_snapshot_id()
+  //     .expect("unable to determine next snapshot id in test");
 
-    assert_eq!(actual_after_two, 2);
-  }
+  //   assert_eq!(actual_after_two, 2);
+  // }
 
-  #[test]
-  fn test_basic_resume() {
-    let temp_dir = assert_fs::TempDir::new().expect("unable to create temp dir in test");
+  // #[test]
+  // fn test_basic_resume() {
+  //   let temp_dir = assert_fs::TempDir::new().expect("unable to create temp dir in test");
 
-    let store_path = temp_dir.path().join("test_store");
+  //   let store_path = temp_dir.path().join("test_store");
 
-    let madeleine = Madeleine::new(store_path.clone(), || {
-      let state: HashMap<String, usize> = HashMap::new();
+  //   let madeleine = Madeleine::new(store_path.clone(), || {
+  //     let state: HashMap<String, usize> = HashMap::new();
 
-      state
-    })
-    .expect("unable to instantiate madeleine in test");
+  //     state
+  //   })
+  //   .expect("unable to instantiate madeleine in test");
 
-    for _i in 0..613 {
-      let action = Action::Increment("panda".to_string(), 1);
+  //   for _i in 0..613 {
+  //     let action = Action::Increment("panda".to_string(), 1);
 
-      madeleine
-        .execute_command(action)
-        .expect("unable to execute increment action in test");
-    }
+  //     madeleine
+  //       .execute_command(action)
+  //       .expect("unable to execute increment action in test");
+  //   }
 
-    madeleine
-      .take_snapshot()
-      .expect("unable to take snapshot in test");
+  //   madeleine
+  //     .take_snapshot()
+  //     .expect("unable to take snapshot in test");
 
-    let expected = madeleine.into_inner();
+  //   let expected = madeleine.into_inner();
 
-    let new_madeleine: Madeleine<HashMap<String, usize>> =
-      Madeleine::resume(store_path).expect("unable to resume madeleine in test");
+  //   let new_madeleine: Madeleine<HashMap<String, usize>> =
+  //     Madeleine::resume(store_path).expect("unable to resume madeleine in test");
 
-    let actual = new_madeleine.into_inner();
+  //   let actual = new_madeleine.into_inner();
 
-    assert_eq!(actual, expected);
-  }
+  //   assert_eq!(actual, expected);
+  // }
 
   // #[test]
   // fn test_complex_resume() {

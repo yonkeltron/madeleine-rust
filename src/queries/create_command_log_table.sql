@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS commands (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  command TEXT,
+  ulid TEXT
+);

@@ -10,6 +10,8 @@ mod command_log;
 pub mod madeleine;
 /// Error type.
 pub mod madeleine_error;
+/// Madeleine Result type.
+pub mod madeleine_result;
 
 pub use crate::command::Command;
 pub use crate::madeleine::Madeleine;

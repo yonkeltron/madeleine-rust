@@ -1,48 +1,87 @@
-use std::cell::RefCell;
+use std::fs;
 use std::path::PathBuf;
 
-use commitlog::*;
+use rusqlite::{params, Connection};
 use ulid::Ulid;
 
 use crate::command::Command;
 use crate::madeleine_error::MadeleineError;
+use crate::madeleine_result::Result;
+
+const CREATE_TABLE_SQL: &str = include_str!("queries/create_command_log_table.sql");
+const INSERT_COMMAND_SQL: &str = include_str!("queries/insert_command.sql");
+const COUNT_COMMANDS_SQL: &str = include_str!("queries/count_commands.sql");
 
 /// Represents an append-only log of commands.
 /// Backed by a stateful store on disk.
 pub(crate) struct CommandLog {
-  commit_log: RefCell<CommitLog>,
+  storage: Connection,
 }
 
 impl CommandLog {
   /// Constructor function.
   pub fn new(store_dir: PathBuf) -> Result<Self, MadeleineError> {
-    let opts = LogOptions::new(store_dir);
-    let commit_log = RefCell::new(CommitLog::new(opts)?);
+    fs::create_dir_all(&store_dir)?;
 
-    Ok(Self { commit_log })
+    let storage_path = store_dir.join("madeleine.db");
+    let storage = Connection::open(storage_path)?;
+
+    storage.execute(CREATE_TABLE_SQL, params![])?;
+
+    Ok(Self { storage })
   }
 
   /// Append a command to the log, serializing it first.
-  pub fn append_command<'a, C: Command<'a>>(&self, command: C) -> Result<Offset, MadeleineError> {
-    let log_entry = (Ulid::new(), command);
+  pub fn append_command<'a, C: Command<'a>>(&self, command: C) -> Result<()> {
+    let serialized_command = serde_json::to_string(&command)?;
 
-    let serialized_command = serde_json::to_string(&log_entry)?;
+    let ulid = Ulid::new().to_string();
 
-    let mut commit_log = self.commit_log.try_borrow_mut()?;
+    let inserted = self.storage.execute(
+      INSERT_COMMAND_SQL,
+      &[(":command", &serialized_command), (":ulid", &ulid)],
+    )?;
 
-    let offset = commit_log.append_msg(&serialized_command)?;
-
-    Ok(offset)
+    if inserted < 1 {
+      Err(MadeleineError::CommandLogAppendError(String::from(
+        "Unable to INSERT command into storage",
+      )))
+    } else {
+      Ok(())
+    }
   }
 
   /// Get the length of the underlying commit log.
-  pub fn len(&self) -> u64 {
-    let extracted = self.commit_log.borrow().last_offset().unwrap_or(0);
+  pub fn len(&self) -> Result<u64> {
+    let extracted = self
+      .storage
+      .query_row(COUNT_COMMANDS_SQL, params![], |row| row.get("count"))?;
 
-    if extracted > 0 {
-      extracted + 1
-    } else {
-      extracted
-    }
+    Ok(extracted)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  use assert_fs::prelude::*;
+  use predicates::prelude::*;
+  use pretty_assertions::assert_eq;
+
+  #[test]
+  fn test_init_command_log() {
+    let temp_dir = assert_fs::TempDir::new().expect("unable to create temp dir in test");
+
+    temp_dir
+      .child("madeleine.db")
+      .assert(predicates::path::missing());
+
+    let command_log = CommandLog::new(temp_dir.path().to_path_buf())
+      .expect("unable to instantiate command log in test");
+
+    temp_dir
+      .child("madeleine.db")
+      .assert(predicates::path::exists());
   }
 }

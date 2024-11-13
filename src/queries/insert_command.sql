@@ -1,0 +1,1 @@
+INSERT INTO commands (command, ulid) VALUES (:command, :ulid);
