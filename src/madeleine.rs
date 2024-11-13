@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::fs;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -10,13 +9,11 @@ use crate::madeleine_error::MadeleineError;
 use crate::madeleine_result::Result;
 
 const COMMAND_LOG_DIR_NAME: &str = "command_log";
-const SNAPSHOT_FILE_SUFFIX: &str = "snapshot";
 
 /// Top-level struct providing the public interface for transparent object persistence.
 pub struct Madeleine<SystemState: Clone + for<'a> Deserialize<'a> + Serialize> {
   command_log: CommandLog,
   internal_state: RefCell<SystemState>,
-  location_dir_path: PathBuf,
 }
 
 impl<SystemState: Clone + for<'a> Deserialize<'a> + Serialize> Madeleine<SystemState> {
@@ -32,36 +29,7 @@ impl<SystemState: Clone + for<'a> Deserialize<'a> + Serialize> Madeleine<SystemS
     Ok(Self {
       command_log,
       internal_state,
-      location_dir_path,
     })
-  }
-
-  /// Resume from existing instance on disk.
-  pub fn resume(location_dir_path: PathBuf) -> Result<Self, MadeleineError> {
-    // Read snapshot file if it exists.
-    let snapshot_id_path = snapshot_id_file_path(location_dir_path.clone());
-
-    if snapshot_id_path.is_file() {
-      let snapshot_file_path_to_read = {
-        let raw_snapshot_id = fs::read(&snapshot_id_path)?;
-        let snapshot_id: usize = serde_json::from_slice(&raw_snapshot_id)?;
-        snapshot_file_path(snapshot_id, location_dir_path.clone())
-      };
-
-      let raw_state = fs::read(snapshot_file_path_to_read)?;
-      let hydrated_state: SystemState = serde_json::from_slice(&raw_state)?;
-      let constructor = || hydrated_state;
-      let madeleine = Madeleine::new(location_dir_path, constructor)?;
-
-      Ok(madeleine)
-    } else {
-      Err(MadeleineError::SnapshotError(String::from(
-        "No snapshots found",
-      )))
-    }
-
-    // If it exists, read the last snapshot and spin up a new Madeleine with that as the initial state.
-    // Then we replay all the commands in the log, if any exist.
   }
 
   /// Execute the command on the business object and update the application state.
@@ -101,29 +69,6 @@ impl<SystemState: Clone + for<'a> Deserialize<'a> + Serialize> Madeleine<SystemS
   pub fn is_empty(&self) -> Result<bool> {
     Ok(self.command_log.len()? == 0)
   }
-
-  /// Determine the next snapshot id in sequence.
-  pub fn next_snapshot_id(&self) -> Result<usize, MadeleineError> {
-    let snapshot_file_path = snapshot_id_file_path(self.location_dir_path.clone());
-
-    if snapshot_file_path.is_file() {
-      let raw = fs::read(snapshot_file_path)?;
-      let parsed: usize = serde_json::from_slice(&raw)?;
-
-      Ok(parsed + 1)
-    } else {
-      Ok(0)
-    }
-  }
-}
-
-fn snapshot_file_path(snapshot_id: usize, location_dir_path: PathBuf) -> PathBuf {
-  let snapshot_file_name = format!("{}.{}", snapshot_id, SNAPSHOT_FILE_SUFFIX);
-  location_dir_path.join(snapshot_file_name)
-}
-
-fn snapshot_id_file_path(location_dir_path: PathBuf) -> PathBuf {
-  location_dir_path.join(SNAPSHOT_FILE_SUFFIX)
 }
 
 #[cfg(test)]
@@ -229,7 +174,7 @@ mod tests {
 
     let actual = state.get("panda");
 
-    let val = 613 as usize;
+    let val = 613_usize;
 
     let expected = Some(&val);
 
@@ -256,7 +201,7 @@ mod tests {
 
     let actual = state.get("panda");
 
-    let val = 613 as usize;
+    let val = 613_usize;
 
     let expected = Some(&val);
 
@@ -342,21 +287,6 @@ mod tests {
     let actual = madeleine.len().expect("unable to count length in test");
 
     assert_eq!(actual, 613);
-  }
-
-  #[test]
-  fn test_next_snapshot_id_first() {
-    let (_temp_dir, madeleine) = make_test_madeleine(|| {
-      let state: HashMap<String, usize> = HashMap::new();
-
-      state
-    });
-
-    let actual = madeleine
-      .next_snapshot_id()
-      .expect("unable to determine next snapshot id in test");
-
-    assert_eq!(actual, 0);
   }
 
   // #[test]
